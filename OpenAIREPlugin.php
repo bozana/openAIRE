@@ -22,13 +22,17 @@ use APP\journal\Journal;
 use APP\publication\Publication;
 use APP\submission\Submission;
 use stdClass;
+use PKP\db\DAORegistry;
+use PKP\install\Installer;
 use PKP\plugins\GenericPlugin;
 use PKP\plugins\Hook;
 use PKP\plugins\PluginRegistry;
+use PKP\site\VersionDAO;
 use APP\plugins\generic\openAIRE\OAIMetadataFormatPlugin_OpenAIRE;
 use APP\plugins\generic\openAIRE\OAIMetadataFormatPlugin_OpenAIREJats;
 use APP\plugins\generic\openAIRE\OpenAIREGatewayPlugin;
 use APP\plugins\generic\openAIRE\OpenAIREJatsGatewayPlugin;
+use APP\plugins\generic\openAIRE\OpenAIREstandardCleanupMigration;
 
 class OpenAIREPlugin extends GenericPlugin {
 
@@ -38,7 +42,17 @@ class OpenAIREPlugin extends GenericPlugin {
     public function register($category, $path, $mainContextId = null)
     {
         $success = parent::register($category, $path, $mainContextId);
-        if ($success && $this->getEnabled($mainContextId)) {
+        if (!$success) {
+            return false;
+        }
+
+        if (Application::isUnderMaintenance()) {
+            return true;
+        }
+
+        Hook::add('Installer::preInstall', [$this, 'preInstall']);
+
+        if ($this->getEnabled($mainContextId)) {
             PluginRegistry::register('oaiMetadataFormats', new OAIMetadataFormatPlugin_OpenAIRE(), $this->getPluginPath());
             PluginRegistry::register('oaiMetadataFormats', new OAIMetadataFormatPlugin_OpenAIREJats(), $this->getPluginPath());
             PluginRegistry::register('gateways', new OpenAIREGatewayPlugin($this), $this->getPluginPath());
@@ -54,6 +68,33 @@ class OpenAIREPlugin extends GenericPlugin {
             $this->_registerTemplateResource();
         }
         return $success;
+    }
+
+    /**
+     * Call the cleanup migration before this plugin's own installation, to
+     * remove leftover DB rows/files from the retired openAIREstandard plugin.
+     * openAIREstandard was never listed in the Plugin Gallery, so admins only
+     * reach this by installing this renamed plugin fresh while still having
+     * openAIREstandard's data/files present -- see
+     * OpenAIREstandardCleanupMigration for what actually gets cleaned up.
+     *
+     * @param string $hookName Installer::preInstall
+     */
+    public function preInstall(string $hookName, array $args): bool
+    {
+        /** @var Installer $installer */
+        $installer = $args[0];
+        $version = $installer->getCurrentVersion();
+        if ($version->getProduct() == 'openAIRE' && $version->getProductType() == 'plugins.generic') {
+            /** @var VersionDAO $versionDao */
+            $versionDao = DAORegistry::getDAO('VersionDAO');
+            $installedPluginVersion = $versionDao->getCurrentVersion($version->getProductType(), $version->getProduct());
+            if (!$installedPluginVersion) {
+                $migration = new OpenAIREstandardCleanupMigration($installer, $this);
+                $migration->up();
+            }
+        }
+        return Hook::CONTINUE;
     }
 
     /**
