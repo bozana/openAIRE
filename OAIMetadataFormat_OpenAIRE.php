@@ -54,10 +54,10 @@ class OAIMetadataFormat_OpenAIRE extends OAIMetadataFormat {
         $publication = $article->getCurrentPublication();
 
         $galleys = $publication->getData('galleys');
-        $printIssn = $journal->getData('printIssn');
-        $onlineIssn = $journal->getData('onlineIssn');
+        $printIssn = $publication->getPrintIssn($journal);
+        $onlineIssn = $publication->getOnlineIssn($journal);
         $publicationLocale = $publication->getData('locale');
-        $publisherInstitution = $journal->getData('publisherInstitution');
+        $publisherInstitution = $publication->getPublisher($journal);
         $datePublished = $publication->getData('datePublished');
         $publicationDoi = $publication->getDoi();
         /** @var OpenAIREPlugin $parentPlugin */
@@ -254,7 +254,7 @@ class OAIMetadataFormat_OpenAIRE extends OAIMetadataFormat {
         }
 
         //24. Citation Title (R)
-        $response .= "<oaire:citationTitle>" . htmlspecialchars($journal->getName($journal->getPrimaryLocale())) . "</oaire:citationTitle>\n";
+        $response .= "<oaire:citationTitle>" . htmlspecialchars($publication->getPrimaryContextName($journal)) . "</oaire:citationTitle>\n";
 
         //25. Citation Volume (R)
         if ($issue && $issue->getVolume() && $issue->getShowVolume()) {
