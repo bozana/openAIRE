@@ -21,6 +21,7 @@ namespace APP\plugins\generic\openAIRE;
 
 use APP\core\Application;
 use APP\facades\Repo;
+use PKP\author\contributorRole\ContributorType;
 use PKP\core\PKPString;
 use PKP\facades\Locale;
 use PKP\funder\Funder;
@@ -96,12 +97,28 @@ class OAIMetadataFormat_OpenAIRE extends OAIMetadataFormat {
         $response .= "<datacite:creators>\n";
         foreach ($publication->getData('authors') as $author) {
             $affiliation = $author->getLocalizedAffiliationNamesAsString($publicationLocale);
+            $affiliationXml = $affiliation ? "<datacite:affiliation>" . htmlspecialchars($affiliation) . "</datacite:affiliation>\n" : '';
+            $contributorType = $author->getData('contributorType');
+            if ($contributorType === ContributorType::ANONYMOUS->getName()) {
+                // DataCite's controlled value for "known to be unknown"
+                $response .= "<datacite:creator>\n" .
+                        "<datacite:creatorName>:unkn</datacite:creatorName>\n" .
+                        "</datacite:creator>\n";
+                continue;
+            }
+            if ($contributorType === ContributorType::ORGANIZATION->getName()) {
+                $response .= "<datacite:creator>\n" .
+                        "<datacite:creatorName nameType=\"Organizational\">" . htmlspecialchars($author->getLocalizedOrganizationName($publicationLocale)) . "</datacite:creatorName>\n" .
+                        $affiliationXml .
+                        "</datacite:creator>\n";
+                continue;
+            }
             $response .= "<datacite:creator>\n" .
                     "<datacite:creatorName nameType=\"Personal\">" . htmlspecialchars($author->getFamilyName($publicationLocale) . ", " . $author->getGivenName($publicationLocale)) . "</datacite:creatorName>\n" .
                     "<datacite:givenName>" . htmlspecialchars($author->getGivenName($publicationLocale)) . "</datacite:givenName>\n" .
                     "<datacite:familyName>" . htmlspecialchars($author->getFamilyName($publicationLocale)) . "</datacite:familyName>\n" .
                     ($author->getOrcid() ? "<datacite:nameIdentifier nameIdentifierScheme=\"ORCID\" schemeURI=\"http://orcid.org\">" . htmlspecialchars($author->getOrcid()) . "</datacite:nameIdentifier>\n" : '') .
-                    ($affiliation ? "<datacite:affiliation>" . htmlspecialchars($affiliation) . "</datacite:affiliation>\n" : '') .
+                    $affiliationXml .
                     "</datacite:creator>\n";
         }
         $response .= "</datacite:creators>\n";
