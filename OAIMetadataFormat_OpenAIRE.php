@@ -79,16 +79,16 @@ class OAIMetadataFormat_OpenAIRE extends OAIMetadataFormat {
 
         //1. Title (M) - Translated article titles
         $response .= "<datacite:titles>\n"
-                . "<datacite:title xml:lang=\"" . htmlspecialchars(LocaleConversion::toBcp47($publicationLocale)) . "\">" . htmlspecialchars(strip_tags($publication->getData('title', $publicationLocale))) . "</datacite:title>\n";
+                . "<datacite:title xml:lang=\"" . htmlspecialchars(LocaleConversion::toBcp47($publicationLocale)) . "\">" . htmlspecialchars(PKPString::html2text($publication->getData('title', $publicationLocale))) . "</datacite:title>\n";
 
         if (!empty($subtitle = $publication->getData('subtitle', $publicationLocale))) {
-            $response .= "<datacite:title xml:lang=\"" . htmlspecialchars(LocaleConversion::toBcp47($publicationLocale)) . "\" titleType=\"Subtitle\">" . htmlspecialchars(strip_tags($subtitle)) . "</datacite:title>\n";
+            $response .= "<datacite:title xml:lang=\"" . htmlspecialchars(LocaleConversion::toBcp47($publicationLocale)) . "\" titleType=\"Subtitle\">" . htmlspecialchars(PKPString::html2text($subtitle)) . "</datacite:title>\n";
         }
         foreach ((array) $publication->getData('title') as $locale => $title) {
             if ($title != '' && $locale != $publicationLocale) {
-                $response .= "<datacite:title xml:lang=\"" . htmlspecialchars(LocaleConversion::toBcp47($locale)) . "\">" . htmlspecialchars(strip_tags($title)) . "</datacite:title>\n";
+                $response .= "<datacite:title xml:lang=\"" . htmlspecialchars(LocaleConversion::toBcp47($locale)) . "\">" . htmlspecialchars(PKPString::html2text($title)) . "</datacite:title>\n";
                 if (!empty($subtitle = $publication->getData('subtitle', $locale))) {
-                    $response .= "<datacite:title xml:lang=\"" . htmlspecialchars(LocaleConversion::toBcp47($locale)) . "\" titleType=\"Subtitle\">" . htmlspecialchars(strip_tags($subtitle)) . "</datacite:title>\n";
+                    $response .= "<datacite:title xml:lang=\"" . htmlspecialchars(LocaleConversion::toBcp47($locale)) . "\" titleType=\"Subtitle\">" . htmlspecialchars(PKPString::html2text($subtitle)) . "</datacite:title>\n";
                 }
             }
         }
@@ -210,9 +210,11 @@ class OAIMetadataFormat_OpenAIRE extends OAIMetadataFormat {
         //12. description - abstract + translated abstracts
         $abstracts = $publication->getData('abstract') ?: [];
         foreach ($abstracts as $locale => $abstract) {
-            if ($abstract != '')
-                $abstract = PKPString::html2text($abstract);
-            $response .= "<dc:description xml:lang=\"" . htmlspecialchars(LocaleConversion::toBcp47($locale)) . "\">" . htmlspecialchars($abstract) . "</dc:description>\n";
+            if ($abstract == '') {
+                continue;
+            }
+            $abstract = PKPString::html2text($abstract);
+            $response .="<dc:description xml:lang=\"" . htmlspecialchars(LocaleConversion::toBcp47($locale)) . "\">" . htmlspecialchars($abstract) . "</dc:description>\n";
         }
 
         //13. Format (R)
@@ -267,7 +269,8 @@ class OAIMetadataFormat_OpenAIRE extends OAIMetadataFormat {
         }
         if ($licenseUrl) {
             $ccLabel = $this->getCCLicenseLabel($licenseUrl, $publicationLocale);
-            $response .= "<oaire:licenseCondition startDate=\"" . date('Y-m-d', $openAccessDate) . "\" uri=\"" . htmlspecialchars($licenseUrl) . "\">" . strip_tags($ccLabel ?? $licenseUrl) . "</oaire:licenseCondition>\n";
+            $startDate = $openAccessDate ? " startDate=\"" . date('Y-m-d', $openAccessDate) . "\"" : '';
+            $response .= "<oaire:licenseCondition" . $startDate . " uri=\"" . htmlspecialchars($licenseUrl) . "\">" . strip_tags($ccLabel ?? $licenseUrl) . "</oaire:licenseCondition>\n";
         }
 
         //19. Coverage (R)
@@ -470,11 +473,10 @@ class OAIMetadataFormat_OpenAIRE extends OAIMetadataFormat {
         if (!isset($genres[$genreId])) {
             $genres[$genreId] = $genreDao->getById($genreId);
         }
-        assert($genres[$genreId]);
         $genre = $genres[$genreId];
 
-        // The genre doesn't look like a main submission document.
-        if ($genre->getCategory() != Genre::GENRE_CATEGORY_DOCUMENT) {
+        // The genre is missing or doesn't look like a main submission document.
+        if (!$genre || $genre->getCategory() != Genre::GENRE_CATEGORY_DOCUMENT) {
             return false;
         }
         return true;
